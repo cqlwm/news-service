@@ -50,7 +50,7 @@ self.filters: list[NewsFilter] = [
 ## 目录结构
 
 ```
-news_service/
+news-service/
 ├── news_service/
 │   ├── config.py              # 配置管理
 │   ├── database.py            # SQLite 操作
