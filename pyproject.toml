@@ -14,3 +14,11 @@ dependencies = [
 [tool.pyright]
 typeCheckingMode = "strict"
 ignore = ["news_service/type_wrapper/*_wrapper.py"]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.0",
+    "pytest-asyncio>=1.4.0",
+    "pytest-mock>=3.15.1",
+]

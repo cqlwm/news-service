@@ -1,2 +1,5 @@
 .idea
-news_service.iml
+.venv
+news-service.iml
+.env
+/news.db
