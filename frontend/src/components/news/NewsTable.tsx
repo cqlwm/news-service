@@ -1,4 +1,3 @@
-
 import { Link } from 'react-router-dom';
 import type { NewsItem } from '../../types';
 import { formatTime, statusLabel, statusColor } from '../../utils/format';
@@ -39,6 +38,7 @@ export default function NewsTable({ items, selectedIds, onSelect, onProcess, onR
               <input type="checkbox" checked={selectedIds.size === items.length && items.length > 0} onChange={toggleAll} className="accent-blue-600" />
             </th>
             <th className="px-4 py-3 font-medium">标题</th>
+            <th className="w-20 px-4 py-3 font-medium">类型</th>
             <th className="w-28 px-4 py-3 font-medium">来源</th>
             <th className="w-24 px-4 py-3 font-medium">状态</th>
             <th className="w-36 px-4 py-3 font-medium">时间</th>
@@ -55,6 +55,13 @@ export default function NewsTable({ items, selectedIds, onSelect, onProcess, onR
                 <Link to={`/news/${item.id}`} className="text-blue-600 hover:underline font-medium">
                   {item.title}
                 </Link>
+              </td>
+              <td className="px-4 py-3">
+                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                  item.type === 'technical' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'
+                }`}>
+                  {item.type === 'technical' ? '技术面' : '基本面'}
+                </span>
               </td>
               <td className="px-4 py-3 text-gray-500">{item.source}</td>
               <td className="px-4 py-3">

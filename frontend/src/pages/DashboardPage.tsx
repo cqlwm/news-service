@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useStats } from '../hooks/useStats';
 import { useScheduler } from '../hooks/useScheduler';
 import { useNewsList } from '../hooks/useNews';
-import { triggerFetch } from '../services/api';
+import { triggerFetch, triggerTechnicalAnalysis } from '../services/api';
 import StatCard from '../components/dashboard/StatCard';
 import StatusPieChart from '../components/dashboard/StatusPieChart';
 import RecentNews from '../components/dashboard/RecentNews';
@@ -15,6 +15,7 @@ export default function DashboardPage() {
   const { status: schedulerStatus, start, stop, refresh: refreshScheduler } = useScheduler();
   const { data: newsData, loading: newsLoading, refresh: refreshNews } = useNewsList({ page: 1, page_size: 5 });
   const [fetching, setFetching] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
     refreshStats();
@@ -33,6 +34,16 @@ export default function DashboardPage() {
     }
   };
 
+  const handleTechnicalAnalysis = async () => {
+    setAnalyzing(true);
+    try {
+      await triggerTechnicalAnalysis();
+      await refreshNews();
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   if (statsLoading) return <Loading />;
   if (statsError) return <ErrorState message={statsError} onRetry={refreshStats} />;
 
@@ -44,6 +55,9 @@ export default function DashboardPage() {
           {schedulerStatus && <StatusBadge running={schedulerStatus.running} />}
           <button onClick={handleFetch} disabled={fetching} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
             {fetching ? '采集中...' : '手动采集'}
+          </button>
+          <button onClick={handleTechnicalAnalysis} disabled={analyzing} className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50">
+            {analyzing ? '分析中...' : '技术分析'}
           </button>
           {schedulerStatus?.running
             ? <button onClick={stop} className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50">停止调度</button>
@@ -77,6 +91,32 @@ export default function DashboardPage() {
             </div>
           </div>
         </>
+      )}
+
+      {/* 调度器状态 */}
+      {schedulerStatus && (
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="bg-white rounded-xl border p-4">
+            <h4 className="text-sm font-semibold text-gray-900 mb-2">📰 基本面调度</h4>
+            <div className="flex items-center gap-2 mb-1">
+              <StatusBadge running={schedulerStatus.running} />
+              <span className="text-xs text-gray-400">间隔 {schedulerStatus.interval}s</span>
+            </div>
+            {schedulerStatus.last_run && (
+              <p className="text-xs text-gray-400">上次运行: {new Date(schedulerStatus.last_run).toLocaleString('zh-CN')}</p>
+            )}
+          </div>
+          <div className="bg-white rounded-xl border p-4">
+            <h4 className="text-sm font-semibold text-gray-900 mb-2">📈 技术面调度</h4>
+            <div className="flex items-center gap-2 mb-1">
+              <StatusBadge running={schedulerStatus.technical.running} />
+              <span className="text-xs text-gray-400">间隔 {schedulerStatus.technical.interval}s</span>
+            </div>
+            {schedulerStatus.technical.last_run && (
+              <p className="text-xs text-gray-400">上次运行: {new Date(schedulerStatus.technical.last_run).toLocaleString('zh-CN')}</p>
+            )}
+          </div>
+        </div>
       )}
 
       <div className="bg-white rounded-xl border p-5">

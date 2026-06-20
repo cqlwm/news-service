@@ -12,3 +12,4 @@ api_router.include_router(pipeline.router, prefix="/api/pipeline", tags=["pipeli
 api_router.include_router(filters.router, prefix="/api/filters", tags=["filters"])
 api_router.include_router(scheduler.router, prefix="/api/scheduler", tags=["scheduler"])
 api_router.include_router(settings.router, prefix="/api/settings", tags=["settings"])
+api_router.include_router(technical.router, prefix="/api/technical", tags=["technical"])

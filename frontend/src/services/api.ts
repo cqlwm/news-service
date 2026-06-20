@@ -5,6 +5,8 @@ import type {
   SchedulerStatus,
   FilterInfo,
   NewsQueryParams,
+  TechnicalConfig,
+  DetectorInfo,
 } from '../types';
 
 const BASE = '';
@@ -42,6 +44,7 @@ export function fetchNewsList(params: NewsQueryParams): Promise<NewsListResponse
   if (params.source) qs.set('source', params.source);
   if (params.date_from) qs.set('date_from', params.date_from);
   if (params.date_to) qs.set('date_to', params.date_to);
+  if (params.news_type) qs.set('news_type', params.news_type);
   return request(`/api/news?${qs.toString()}`);
 }
 
@@ -133,4 +136,25 @@ export function retryNews(newsId: string): Promise<{ message: string; news_id: s
 
 export function discardNews(newsId: string): Promise<{ message: string; news_id: string }> {
   return request(`/api/pipeline/news/${newsId}/discard`, { method: 'POST' });
+}
+
+// ── Technical Analysis ──
+
+export function triggerTechnicalAnalysis(): Promise<{ message: string; new_ids: string[] }> {
+  return request('/api/technical/run', { method: 'POST' });
+}
+
+export function fetchTechnicalConfig(): Promise<TechnicalConfig> {
+  return request('/api/technical/config');
+}
+
+export function updateTechnicalConfig(config: Partial<TechnicalConfig>): Promise<{ message: string; config: Partial<TechnicalConfig> }> {
+  return request('/api/technical/config', {
+    method: 'PUT',
+    body: JSON.stringify(config),
+  });
+}
+
+export function fetchTechnicalDetectors(): Promise<DetectorInfo[]> {
+  return request('/api/technical/detectors');
 }

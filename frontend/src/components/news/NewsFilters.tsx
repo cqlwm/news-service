@@ -10,15 +10,24 @@ export default function NewsFilters({ params, onChange }: Props) {
   const [keyword, setKeyword] = useState(params.keyword || '');
   const [status, setStatus] = useState(params.status || '');
   const [source, setSource] = useState(params.source || '');
+  const [newsType, setNewsType] = useState(params.news_type || '');
 
   const apply = () => {
-    onChange({ ...params, keyword: keyword || undefined, status: status || undefined, source: source || undefined, page: 1 });
+    onChange({
+      ...params,
+      keyword: keyword || undefined,
+      status: status || undefined,
+      source: source || undefined,
+      news_type: newsType || undefined,
+      page: 1,
+    });
   };
 
   const reset = () => {
     setKeyword('');
     setStatus('');
     setSource('');
+    setNewsType('');
     onChange({ page: 1, page_size: 20 });
   };
 
@@ -44,6 +53,15 @@ export default function NewsFilters({ params, onChange }: Props) {
         <option value="generation_failed">生成失败</option>
         <option value="publish_failed">发布失败</option>
         <option value="discarded">已废弃</option>
+      </select>
+      <select
+        value={newsType}
+        onChange={(e) => setNewsType(e.target.value)}
+        className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <option value="">全部类型</option>
+        <option value="fundamental">基本面</option>
+        <option value="technical">技术面</option>
       </select>
       <input
         type="text"

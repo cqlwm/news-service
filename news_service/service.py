@@ -85,18 +85,25 @@ class NewsService:
         返回 True 表示成功发布，False 表示被过滤或失败。
         """
         try:
-            news_detail = await self.fetcher.fetch_news_detail(news_id)
-            if not news_detail:
-                return False
-
-            # 过滤
-            for filter_ in self.filters:
-                if not await filter_.should_include(news_detail):
-                    logger.info(f"News {news_id} filtered out by {filter_.name}")
+            # 优先从本地数据库获取（技术面新闻等已入库的新闻）
+            db_news = self.db.get_news_by_id(news_id)
+            if db_news:
+                title = db_news["title"]
+                content = db_news.get("content", "")
+                image_path: str | None = None
+            else:
+                # 不在本地库中，从外部 API 拉取
+                news_detail = await self.fetcher.fetch_news_detail(news_id)
+                if not news_detail:
                     return False
 
-            # 入库（如果尚未入库）
-            if not self.db.news_exists(news_id):
+                # 过滤
+                for filter_ in self.filters:
+                    if not await filter_.should_include(news_detail):
+                        logger.info(f"News {news_id} filtered out by {filter_.name}")
+                        return False
+
+                # 入库
                 published_at = news_detail.published_at
                 if isinstance(published_at, str):
                     published_at = datetime.fromisoformat(published_at)
@@ -109,37 +116,38 @@ class NewsService:
                     published_at=published_at,
                 )
 
-            # 下载图片
-            image_path: str | None = None
-            if news_detail.images:
-                local_path = await self.downloader.download_image(
-                    news_detail.images[0], news_detail.id, 0
-                )
-                if local_path:
-                    self.db.save_image(news_detail.id, news_detail.images[0], local_path)
-                    image_path = local_path
+                # 下载图片
+                image_path = None
+                if news_detail.images:
+                    local_path = await self.downloader.download_image(
+                        news_detail.images[0], news_detail.id, 0
+                    )
+                    if local_path:
+                        self.db.save_image(news_detail.id, news_detail.images[0], local_path)
+                        image_path = local_path
+
+                title = news_detail.title
+                content = news_detail.content
 
             # 生成贴文
             try:
-                base_asset, post_content = await self.generator.generate_post(
-                    news_detail.title, news_detail.content
-                )
+                base_asset, post_content = await self.generator.generate_post(title, content)
             except ConfigError as e:
                 logger.warning(f"Cannot generate post for {news_id}: LLM not configured")
-                self.db.update_news_status(news_detail.id, NewsStatus.GENERATION_FAILED, error_message=str(e))
+                self.db.update_news_status(news_id, NewsStatus.GENERATION_FAILED, error_message=str(e))
                 return False
-            self.db.save_post(news_detail.id, base_asset, post_content)
-            self.db.update_news_status(news_detail.id, NewsStatus.POST_GENERATED)
+            self.db.save_post(news_id, base_asset, post_content)
+            self.db.update_news_status(news_id, NewsStatus.POST_GENERATED)
 
             # 发布
             success = self.publisher.publish(base_asset, post_content, image_path)
             if success:
-                self.db.mark_post_published(news_detail.id)
-                self.db.update_news_status(news_detail.id, NewsStatus.PUBLISHED)
-                logger.info(f"Successfully published news: {news_detail.title}")
+                self.db.mark_post_published(news_id)
+                self.db.update_news_status(news_id, NewsStatus.PUBLISHED)
+                logger.info(f"Successfully published news: {title}")
             else:
-                self.db.update_news_status(news_detail.id, NewsStatus.PUBLISH_FAILED, error_message="Publisher returned failure")
-                logger.error(f"Failed to publish news: {news_detail.title}")
+                self.db.update_news_status(news_id, NewsStatus.PUBLISH_FAILED, error_message="Publisher returned failure")
+                logger.error(f"Failed to publish news: {title}")
 
             return success
 
@@ -288,8 +296,8 @@ class NewsService:
             if self.db.news_exists(item.id):
                 continue
             published_at = datetime.fromisoformat(item.published_at) if item.published_at else None
-            # 从 id 中提取 pattern_type
-            pattern_type = item.id.split("_", 2)[1] if item.id.startswith("tech_") else ""
+            # 合并所有 pattern_type（逗号分隔）
+            pattern_type = ""
             self.db.save_technical_news(
                 news_id=item.id,
                 title=item.title,

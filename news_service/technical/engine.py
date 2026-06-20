@@ -32,6 +32,9 @@ class TechnicalEngine:
         )
         self.market_data = MarketDataProvider()
 
+        # (symbol, timeframe) -> 最后一次分析时最后一根 K 线的时间戳（毫秒）
+        self._last_candle_ts: dict[tuple[str, str], int] = {}
+
         # 注册默认检测器
         self.detectors: list[BaseDetector] = [
             ConsecutiveCandleDetector(min_consecutive=self.config.min_consecutive),
@@ -47,7 +50,11 @@ class TechnicalEngine:
         ]
 
     async def run(self) -> list[NewsDetail]:
-        """执行一轮完整的技术面检测，返回技术新闻列表。"""
+        """执行一轮完整的技术面检测，返回技术新闻列表。
+
+        每个 symbol 在不同时间框架、不同检测器下的所有模式
+        合并为一条技术新闻。
+        """
         logger.info("TechnicalEngine: starting detection cycle")
 
         # 1. 动态排名获取监控标的
@@ -67,8 +74,28 @@ class TechnicalEngine:
                 ccxt_symbols, timeframe=timeframe, limit=100,
             )
 
-            # 3. 运行所有检测器
+            # 3. 逐 symbol 检查 K 线是否更新，跳过未变化的
             for symbol, ohlcv in ohlcv_map.items():
+                if not ohlcv:
+                    continue
+
+                last_ts = int(ohlcv[-1]["timestamp"])  # type: ignore[arg-type]
+                cache_key = (symbol, timeframe)
+                cached_ts = self._last_candle_ts.get(cache_key)
+
+                if cached_ts is not None and last_ts == cached_ts:
+                    logger.debug(
+                        "TechnicalEngine: %s %s no new candle (ts=%d), skipping",
+                        symbol, timeframe, last_ts,
+                    )
+                    continue
+
+                logger.info(
+                    "TechnicalEngine: %s %s new candle detected (ts=%d), running detectors",
+                    symbol, timeframe, last_ts,
+                )
+
+                # 4. 运行所有检测器
                 for detector in self.detectors:
                     try:
                         patterns = await detector.detect(symbol, ohlcv, timeframe)
@@ -79,19 +106,37 @@ class TechnicalEngine:
                             detector.name, symbol, timeframe, e,
                         )
 
-        # 4. 去重：相同 symbol + pattern_type 只保留 severity 最高的
-        unique_patterns = self._deduplicate(all_patterns)
+                # 5. 更新缓存时间戳
+                self._last_candle_ts[cache_key] = last_ts
 
-        # 5. 按 severity 降序排列
-        unique_patterns.sort(key=lambda p: p.severity, reverse=True)
+        # 6. 按 symbol 分组，每个 symbol 合并为一条新闻
+        symbol_patterns: dict[str, list[DetectedPattern]] = {}
+        for p in all_patterns:
+            symbol_patterns.setdefault(p.symbol, []).append(p)
 
         logger.info(
-            "TechnicalEngine: detected %d patterns (unique: %d)",
-            len(all_patterns), len(unique_patterns),
+            "TechnicalEngine: detected %d patterns across %d symbols",
+            len(all_patterns), len(symbol_patterns),
         )
 
-        # 6. 转换为 NewsDetail
-        return [self._to_news_detail(p) for p in unique_patterns]
+        # 7. 每个 symbol 去重后合并为一条 NewsDetail
+        news_list: list[NewsDetail] = []
+        for symbol, patterns in symbol_patterns.items():
+            unique = self._deduplicate(patterns)
+            news_list.append(self._merge_to_news_detail(symbol, unique))
+
+        # 8. 按最高 severity 降序排列
+        news_list.sort(
+            key=lambda n: max(
+                (p.severity for p in symbol_patterns.get(
+                    convert_symbol_to_ccxt(n.title.split(" ")[0]), []
+                )),
+                default=0,
+            ),
+            reverse=True,
+        )
+
+        return news_list
 
     @staticmethod
     def _deduplicate(patterns: list[DetectedPattern]) -> list[DetectedPattern]:
@@ -104,15 +149,31 @@ class TechnicalEngine:
         return list(seen.values())
 
     @staticmethod
-    def _to_news_detail(pattern: DetectedPattern) -> NewsDetail:
-        """将检测到的模式转换为 NewsDetail，复用现有流水线。"""
-        base = pattern.symbol.replace("/USDT", "")
-        now_iso = datetime.now(timezone.utc).isoformat()
+    def _merge_to_news_detail(symbol: str, patterns: list[DetectedPattern]) -> NewsDetail:
+        """将同一个 symbol 的所有模式合并为一条 NewsDetail。"""
+        base = symbol.replace("/USDT", "")
+        now = datetime.now(timezone.utc)
+        now_iso = now.isoformat()
+        now_ts = int(now.timestamp())
+
+        # 按 severity 降序排列
+        sorted_patterns = sorted(patterns, key=lambda p: p.severity, reverse=True)
+
+        # 标题：取 severity 最高的模式标题
+        primary = sorted_patterns[0]
+        title = primary.title
+
+        # 内容：组合所有模式的描述
+        lines: list[str] = []
+        for i, p in enumerate(sorted_patterns, 1):
+            lines.append(f"{i}. [{p.direction.upper()}] {p.title}")
+            lines.append(f"   {p.description}")
+        content = "\n".join(lines)
 
         return NewsDetail(
-            id=f"tech_{pattern.pattern_type}_{base}_{int(datetime.now(timezone.utc).timestamp())}",
-            title=pattern.title,
-            content=pattern.description,
+            id=f"tech_{base}_{now_ts}",
+            title=title,
+            content=content,
             source="Technical Analysis",
             url="",
             published_at=now_iso,

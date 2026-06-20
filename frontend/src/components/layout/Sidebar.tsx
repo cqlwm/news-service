@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 const links = [
   { to: '/dashboard', label: '📊 仪表盘' },
   { to: '/news', label: '📰 新闻列表' },
+  { to: '/technical', label: '📈 技术面' },
   { to: '/filters', label: '🔧 过滤器' },
   { to: '/settings', label: '⚙️ 设置' },
 ];
