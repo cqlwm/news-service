@@ -20,7 +20,7 @@ typeCheckingMode = "strict"
 ignore = ["news_service/type_wrapper/*_wrapper.py"]
 
 [tool.uv.sources]
-binance-service = { path = "/Users/li/projects/binance-service" }
+binance-service = { path = "../binance-service" }
 
 [dependency-groups]
 dev = [
