@@ -109,7 +109,7 @@ async def publish_post(
     if not post:
         raise HTTPException(status_code=400, detail="No generated post found. Generate first.")
 
-    success = service.publish_post(news_id)
+    success = await service.publish_post(news_id)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to publish post")
 

@@ -140,7 +140,7 @@ class NewsService:
             self.db.update_news_status(news_id, NewsStatus.POST_GENERATED)
 
             # 发布
-            success = self.publisher.publish(base_asset, post_content, image_path)
+            success = await self.publisher.publish(base_asset, post_content, image_path)
             if success:
                 self.db.mark_post_published(news_id)
                 self.db.update_news_status(news_id, NewsStatus.PUBLISHED)
@@ -215,7 +215,7 @@ class NewsService:
 
         if current_status == NewsStatus.PUBLISH_FAILED.value:
             # 仅重试发布
-            success = self.publish_post(news_id)
+            success = await self.publish_post(news_id)
             if success:
                 logger.info(f"Retry publish succeeded for news: {news_id}")
             else:
@@ -228,14 +228,14 @@ class NewsService:
             if not result:
                 logger.error(f"Retry generation failed for news: {news_id}")
                 return False
-            return self.publish_post(news_id)
+            return await self.publish_post(news_id)
 
         logger.warning(f"Cannot retry news {news_id}: invalid status {current_status}")
         return False
 
     # ── 发布 ───────────────────────────────────────────────
 
-    def publish_post(self, news_id: str) -> bool:
+    async def publish_post(self, news_id: str) -> bool:
         """发布已生成的贴文。
 
         仅允许在 POST_GENERATED / PUBLISH_FAILED 状态下发布。
@@ -255,7 +255,7 @@ class NewsService:
             return False
 
         image_path = self.db.get_first_image(news_id)
-        success = self.publisher.publish(post["base_asset"], post["content"], image_path)
+        success = await self.publisher.publish(post["base_asset"], post["content"], image_path)
         if success:
             self.db.mark_post_published(news_id)
             self.db.update_news_status(news_id, NewsStatus.PUBLISHED)

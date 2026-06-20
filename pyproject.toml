@@ -5,6 +5,7 @@ description = "News fetching, processing, and publishing service"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "binance-service",
     "ccxt>=4.5.59",
     "dotenv>=0.9.9",
     "fastapi>=0.137.2",
@@ -17,6 +18,9 @@ dependencies = [
 [tool.pyright]
 typeCheckingMode = "strict"
 ignore = ["news_service/type_wrapper/*_wrapper.py"]
+
+[tool.uv.sources]
+binance-service = { path = "/Users/li/projects/binance-service" }
 
 [dependency-groups]
 dev = [
