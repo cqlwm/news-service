@@ -13,6 +13,8 @@ ALLOWED_SETTINGS = {
     "openai_model",
     "fetch_interval",
     "max_news_per_fetch",
+    "prompt_system",
+    "prompt_user_template",
 }
 
 

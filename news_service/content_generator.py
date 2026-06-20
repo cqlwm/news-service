@@ -4,6 +4,24 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_SYSTEM_PROMPT = "你是一个专业的加密货币新闻编辑，擅长将新闻改写为社交媒体贴文。"
+
+DEFAULT_USER_TEMPLATE = """请将以下新闻改写为适合社交媒体发布的贴文格式：
+
+要求：
+1. 简洁有力，吸引眼球
+2. 在开头明确指出主要涉及的加密货币（格式：$BTC $ETH 等），如果有多个最多3个
+3. 长度控制在200字以内
+4. 语气专业但不失活泼
+5. 可以适当的添加一些emoji让内容更生动
+
+新闻标题：{title}
+新闻内容：{content}
+
+请按以下格式返回：
+BASE_ASSET: BTC
+CONTENT: 这里是贴文内容..."""
+
 
 class ConfigError(Exception):
     """配置不完整导致的错误。"""
@@ -21,6 +39,8 @@ class ContentGenerator:
         self._api_key = api_key
         self._base_url = base_url
         self.model = model
+        self.system_prompt: str = DEFAULT_SYSTEM_PROMPT
+        self.user_template: str = DEFAULT_USER_TEMPLATE
         self._openai_client = None
 
     @property
@@ -33,6 +53,8 @@ class ContentGenerator:
         api_key: str | None = None,
         base_url: str | None = None,
         model: str | None = None,
+        system_prompt: str | None = None,
+        user_template: str | None = None,
     ) -> None:
         """运行时更新配置。当 API key 或 base URL 变化时，重建客户端。"""
         changed = False
@@ -44,6 +66,10 @@ class ContentGenerator:
             changed = True
         if model is not None:
             self.model = model
+        if system_prompt is not None:
+            self.system_prompt = system_prompt
+        if user_template is not None:
+            self.user_template = user_template
         if changed:
             self._openai_client = None
             logger.info("ContentGenerator client recreated due to config change")
@@ -78,21 +104,7 @@ class ContentGenerator:
                 "请在设置页面完成配置。"
             )
 
-        prompt = f"""请将以下新闻改写为适合社交媒体发布的贴文格式：
-
-要求：
-1. 简洁有力，吸引眼球
-2. 在开头明确指出主要涉及的加密货币（格式：$BTC $ETH 等），如果有多个最多3个
-3. 长度控制在200字以内
-4. 语气专业但不失活泼
-5. 可以适当的添加一些emoji让内容更生动
-
-新闻标题：{title}
-新闻内容：{content[:1000]}
-
-请按以下格式返回：
-BASE_ASSET: BTC
-CONTENT: 这里是贴文内容..."""
+        prompt = self.user_template.format(title=title, content=content[:1000])
 
         try:
             client = self._get_client()
@@ -101,7 +113,7 @@ CONTENT: 这里是贴文内容..."""
                 messages=[
                     {
                         "role": "system",
-                        "content": "你是一个专业的加密货币新闻编辑，擅长将新闻改写为社交媒体贴文。",
+                        "content": self.system_prompt,
                     },
                     {"role": "user", "content": prompt},
                 ],

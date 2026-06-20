@@ -320,12 +320,15 @@ class NewsService:
         api_key = settings.get('openai_api_key', '')
         base_url = settings.get('openai_base_url', '')
         model = settings.get('openai_model', '')
-        if api_key or base_url or model:
-            self.generator.update_config(
-                api_key=api_key or None,
-                base_url=base_url or None,
-                model=model or None,
-            )
+        system_prompt = settings.get('prompt_system', '')
+        user_template = settings.get('prompt_user_template', '')
+        self.generator.update_config(
+            api_key=api_key or None,
+            base_url=base_url or None,
+            model=model or None,
+            system_prompt=system_prompt or None,
+            user_template=user_template or None,
+        )
 
         logger.info(f'Configuration reloaded from DB: {len(settings)} keys')
 

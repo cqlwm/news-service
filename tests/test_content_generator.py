@@ -31,7 +31,7 @@ class TestContentGenerator:
         ]
         mock_client = mocker.AsyncMock()
         mock_client.chat.completions.create.return_value = mock_response
-        generator.client = mock_client
+        generator._openai_client = mock_client
 
         base_asset, content = await generator.generate_post(
             "Bitcoin Surges", "BTC reaches new highs",
@@ -54,7 +54,7 @@ class TestContentGenerator:
         ]
         mock_client = mocker.AsyncMock()
         mock_client.chat.completions.create.return_value = mock_response
-        generator.client = mock_client
+        generator._openai_client = mock_client
 
         base_asset, content = await generator.generate_post(
             "Crypto News", "Some content",
@@ -69,7 +69,7 @@ class TestContentGenerator:
         """LLM 调用失败时应有 fallback 逻辑。"""
         mock_client = mocker.AsyncMock()
         mock_client.chat.completions.create.side_effect = Exception("API error")
-        generator.client = mock_client
+        generator._openai_client = mock_client
 
         base_asset, content = await generator.generate_post(
             "Bitcoin News", "BTC content here",
