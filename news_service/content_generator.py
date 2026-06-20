@@ -136,8 +136,10 @@ class ContentGenerator:
 
         for line in response.split("\n"):
             if line.startswith("BASE_ASSET:"):
-                base_asset = line.split(":", 1)[1].strip()
+                base_asset = line.split(":", 1)[1].strip().lstrip("$")
             elif line.startswith("CONTENT:"):
                 content = line.split(":", 1)[1].strip()
+                if content.startswith("$"):
+                    content = content[1:]
 
         return base_asset, content
