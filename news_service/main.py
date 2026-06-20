@@ -1,20 +1,12 @@
 from __future__ import annotations
 
+import argparse
 import asyncio
 import logging
-from datetime import datetime
 
-from .config import (
-    NEWS_LIST_URL, NEWS_DETAIL_URL, IMAGES_DIR, DB_PATH,
-    OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL,
-    FETCH_INTERVAL, MAX_NEWS_PER_FETCH,
-)
-from .database import NewsDatabase
-from .news_fetcher import NewsFetcher
-from .image_downloader import ImageDownloader
-from .content_generator import ContentGenerator
-from .publisher import Publisher
-from .filters import NewsFilter, KeywordFilter
+from .app import run_server
+from .config import API_HOST, API_PORT
+from .service import NewsService, Scheduler
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,94 +15,44 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class NewsService:
-    def __init__(self) -> None:
-        self.db = NewsDatabase(DB_PATH)
-        self.fetcher = NewsFetcher(NEWS_LIST_URL, NEWS_DETAIL_URL)
-        self.downloader = ImageDownloader(IMAGES_DIR)
-        self.generator = ContentGenerator(OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL)
-        self.publisher = Publisher()
-
-        self.filters: list[NewsFilter] = []
-
-    async def process_news_cycle(self) -> None:
-        logger.info("Fetching news list...")
-        news_items = await self.fetcher.fetch_news_list()
-
-        new_items = [item for item in news_items if not self.db.news_exists(item.id)]
-        logger.info(f"Found {len(new_items)} new news out of {len(news_items)} total")
-
-        for item in new_items[:MAX_NEWS_PER_FETCH]:
-            await self._process_single_news(item.id)
-
-    async def _process_single_news(self, news_id: str) -> None:
-        try:
-            news_detail = await self.fetcher.fetch_news_detail(news_id)
-            if not news_detail:
-                return
-
-            for filter_ in self.filters:
-                if not await filter_.should_include(news_detail):
-                    logger.info(f"News {news_id} filtered out by {filter_.name}")
-                    return
-
-            published_at = news_detail.published_at
-            if isinstance(published_at, str):
-                published_at = datetime.fromisoformat(published_at)
-
-            self.db.save_news(
-                news_id=news_id,
-                title=news_detail.title,
-                content=news_detail.content,
-                source=news_detail.source,
-                url=news_detail.url,
-                published_at=published_at,
-            )
-
-            image_path: str | None = None
-            if news_detail.images:
-                local_path = await self.downloader.download_image(
-                    news_detail.images[0], news_id, 0,
-                )
-                if local_path:
-                    self.db.save_image(news_id, news_detail.images[0], local_path)
-                    image_path = local_path
-
-            base_asset, post_content = await self.generator.generate_post(
-                news_detail.title,
-                news_detail.content,
-            )
-
-            success = self.publisher.publish(base_asset, post_content, image_path)
-
-            if success:
-                self.db.mark_processed(news_id)
-                logger.info(f"Successfully published news: {news_detail.title}")
-            else:
-                logger.error(f"Failed to publish news: {news_detail.title}")
-
-        except Exception as e:
-            logger.error(f"Error processing news {news_id}: {e}")
-
-    async def run(self) -> None:
-        logger.info("News service starting...")
-
-        try:
-            while True:
-                await self.process_news_cycle()
-                logger.info(f"Sleeping for {FETCH_INTERVAL} seconds...")
-                await asyncio.sleep(FETCH_INTERVAL)
-        except KeyboardInterrupt:
-            logger.info("News service stopped by user")
-        finally:
-            await self.fetcher.close()
-            await self.downloader.close()
-
-
-async def main() -> None:
+async def run_cli() -> None:
+    """以 CLI 模式运行：启动后台调度器，定时采集并处理新闻。"""
     service = NewsService()
-    await service.run()
+    scheduler = Scheduler(service)
+    scheduler.start()
+
+    logger.info("News service CLI mode started")
+    logger.info(f"Fetch interval: {scheduler.interval}s")
+
+    try:
+        while True:
+            await asyncio.sleep(1)
+    except KeyboardInterrupt:
+        logger.info("Shutting down...")
+        scheduler.stop()
+        await service.close()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="News Service")
+    parser.add_argument(
+        "--mode",
+        choices=["api", "cli"],
+        default="api",
+        help="运行模式: api (FastAPI 服务, 默认) / cli (后台定时采集)",
+    )
+    parser.add_argument("--host", default=API_HOST, help="API 监听地址")
+    parser.add_argument("--port", type=int, default=API_PORT, help="API 监听端口")
+    parser.add_argument("--reload", action="store_true", help="热重载（仅 API 模式）")
+
+    args = parser.parse_args()
+
+    if args.mode == "api":
+        logger.info(f"Starting API server on {args.host}:{args.port}")
+        run_server(host=args.host, port=args.port, reload=args.reload)
+    else:
+        asyncio.run(run_cli())
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
